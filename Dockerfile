@@ -13,7 +13,8 @@
 ARG COOLIFY_VERSION=4.5.0
 ARG BASE=docker.io/coollabsio/coolify:${COOLIFY_VERSION}
 # Go 1.27.3: erfuellt go.mod von cloudflared (go 1.27.3) und enthaelt alle stdlib Fixes.
-ARG GO_IMAGE=golang:1.27.3-alpine
+# Per Digest festgelegt (Multi Arch Index, Stand 25.10.2026); beim Anheben Tag und Digest gemeinsam aendern.
+ARG GO_IMAGE=golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c
 # MinIO Client: github.com/minio/mc ist archiviert, AIStor mc ist nicht quelloffen.
 # Gebaut wird der letzte Stand von master (Commit vom 06.11.2025).
 ARG MC_REF=77f82e18b5401a65958f1619df6ebb994634bd88

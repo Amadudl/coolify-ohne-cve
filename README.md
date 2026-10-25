@@ -79,3 +79,13 @@ der Lauf ohne Veroeffentlichung ab und der naechste Lauf versucht es erneut.
 
 Siehe [docs/einbindung.md](docs/einbindung.md) (Sicherung, Umstellung, Rueckweg).
 Sentinel: [docs/sentinel.md](docs/sentinel.md).
+
+## Lizenzen
+
+- `/usr/bin/mc`: MinIO Client, GNU AGPLv3 (`LICENSE` im Quellstand `github.com/minio/mc` Commit
+  `77f82e18b5401a65958f1619df6ebb994634bd88`). Geaendert wird nur `go.mod`/`go.sum` (angehobene Module per
+  `scripts/raise-modules.sh`), Bau nach `Dockerfile`. Wer das Abbild weitergibt (auch ein oeffentliches GHCR Paket),
+  muss den vollstaendigen Quellstand dazu anbieten (AGPLv3 Abschnitt 6): Upstream Commit plus dieses Repo. Solange
+  dieses Repo privat ist, erfuellt das Label `org.opencontainers.image.source` das nicht.
+- `/usr/local/bin/cloudflared`: Apache License 2.0, Tag wie im offiziellen Abbild, nur `go.mod`/`go.sum` geaendert.
+- Alles andere stammt unveraendert aus `coollabsio/coolify` (Apache License 2.0).

@@ -4,7 +4,7 @@
 # Aufruf: sh test.sh <offizielles abbild> <abgeleitetes abbild>
 #
 # Umgebung (alles optional):
-#   TRIVY        Trivy Aufruf, Vorgabe: Container aquasec/trivy:0.76.1 mit Docker Socket
+#   TRIVY        Trivy Aufruf, Vorgabe: Container aquasec/trivy:0.76.1 (per Digest) mit Docker Socket
 #   TRIVY_STRICT 1 = das ganze Abbild muss 0 HIGH/CRITICAL (fixable) haben.
 #                Vorgabe 0 = mc und cloudflared muessen 0 haben und das abgeleitete
 #                Abbild darf keinen Befund haben, den das offizielle nicht hat.
@@ -16,7 +16,7 @@ set -eu
 
 ORIG=${1:?offizielles Abbild fehlt}
 NEU=${2:?abgeleitetes Abbild fehlt}
-TRIVY=${TRIVY:-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.1}
+TRIVY=${TRIVY:-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c}
 S3_IMAGE=${S3_IMAGE:-rclone/rclone:1}
 PG_IMAGE=${PG_IMAGE:-postgres:15-alpine}
 REDIS_IMAGE=${REDIS_IMAGE:-redis:7-alpine}

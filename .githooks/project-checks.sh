@@ -5,6 +5,7 @@ set -e
 cd "$(git rev-parse --show-toplevel)"
 sh -n test.sh
 sh -n scripts/raise-modules.sh
+sh -n scripts/check-modules.sh
 if [ -f workflow/aktivieren.patch ]; then
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT

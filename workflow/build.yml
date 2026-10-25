@@ -189,6 +189,10 @@ jobs:
               --severity HIGH,CRITICAL --ignore-unfixed --format json "$BILD" \
               | jq '[.Results[]?.Vulnerabilities[]?] | length') || N="Scan fehlgeschlagen"
             echo "Trivy HIGH/CRITICAL fixable ${BILD}: ${N}" >> "$GITHUB_STEP_SUMMARY"
+            # Sichtbar machen, wenn das veroeffentlichte Abbild nicht mehr 0 hat (Ziel TK-119), ohne zu blockieren.
+            if [ "$BILD" = "local/coolify:${VERSION}" ] && [ "$N" != 0 ]; then
+              echo "::warning title=Trivy Befunde::local/coolify:${VERSION}: ${N} HIGH/CRITICAL mit Fix, Pins in Dockerfile anheben"
+            fi
           done
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --quiet --scanners vuln \
             --severity HIGH,CRITICAL --ignore-unfixed --format table "local/coolify:${VERSION}" || true
