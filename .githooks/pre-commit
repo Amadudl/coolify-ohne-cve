@@ -1,0 +1,44 @@
+#!/bin/sh
+# ============================================================
+#  Pflicht-Gate vor jedem Commit (IEX-Labs-Hook-Kit v3).
+#  1. Geheimnis-Scan der gestagten Aenderungen
+#  2. Verbotene Dateien (.env, Schluessel, Keystores)
+#  3. Unix-Zeilenenden fuer Shell-Skripte und Hooks
+#  4. Projektpruefungen (Tests usw.) aus .githooks/project-checks.sh
+#  Aktivieren einmalig pro Clone:  sh .githooks/install.sh
+#  Notfall-Bypass nur bewusst:     git commit --no-verify
+# ============================================================
+HOOK_DIR=$(dirname "$0")
+
+sh "$HOOK_DIR/lib/secret-scan.sh" || exit 1
+
+# CRLF in Shell-Skripten bricht #!/bin/sh auf Linux und in Git-Bash.
+# Dateinamen zeilenweise (Leerzeichen, Umlaute); umbenannte Dateien zaehlen mit.
+crlf=""
+liste=$(mktemp "${TMPDIR:-/tmp}/iex-crlf.XXXXXX") || exit 1
+git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMRT -- '*.sh' '.githooks/*' > "$liste"
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if git show ":$f" | tr -cd '\r' | wc -c | grep -qv '^ *0$'; then
+    crlf="$crlf $f"
+  fi
+done < "$liste"
+rm -f "$liste"
+if [ -n "$crlf" ]; then
+  echo "✗ Commit blockiert: Windows-Zeilenenden (CRLF) in:$crlf"
+  echo "  Beheben: dos2unix <datei> oder .gitattributes mit 'eol=lf'."
+  exit 1
+fi
+
+if [ -f "$HOOK_DIR/project-checks.sh" ]; then
+  echo "pre-commit: Projektpruefungen laufen …"
+  sh "$HOOK_DIR/project-checks.sh"
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "✗ Commit blockiert: Projektpruefungen fehlgeschlagen."
+    echo "  Erst gruen machen. Notfall-Bypass nur bewusst mit --no-verify."
+    exit 1
+  fi
+fi
+echo "✓ pre-commit gruen — Commit erlaubt."
+exit 0
