@@ -1,0 +1,262 @@
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+new file mode 100644
+index 0000000..bda5d9f
+--- /dev/null
++++ b/.github/workflows/build.yml
+@@ -0,0 +1,256 @@
++name: build
++
++# Baut ghcr.io/amadudl/coolify-ohne-cve:<version> fuer jede neue Coolify Version.
++# Schlaegt der gepatchte Bau oder test.sh fehl, wird das unveraenderte offizielle
++# Abbild coollabsio/coolify:<version> unter demselben Tag veroeffentlicht (Ersatz),
++# damit upgrade.sh auf dem Server das Abbild immer ziehen kann. Der Lauf endet dann rot.
++
++on:
++  push:
++    branches: [main]
++  schedule:
++    - cron: '*/15 * * * *'
++  workflow_dispatch:
++    inputs:
++      version:
++        description: 'Coolify Version (leer = coolify.v4.version aus versions.json)'
++        required: false
++        default: ''
++      force:
++        description: 'Auch bauen, wenn der Tag schon gepatcht vorliegt'
++        type: boolean
++        required: false
++        default: false
++
++permissions:
++  contents: read
++
++concurrency:
++  group: build
++  cancel-in-progress: false
++
++jobs:
++  build:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 60
++    permissions:
++      contents: read
++      packages: write
++      actions: read
++    env:
++      IMAGE: ghcr.io/amadudl/coolify-ohne-cve
++      UPSTREAM: docker.io/coollabsio/coolify
++      TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
++      VERSIONS_URL: https://cdn.coollabs.io/coolify/versions.json
++    steps:
++      - name: Version ermitteln und Bedarf pruefen
++        id: plan
++        env:
++          INPUT_VERSION: ${{ inputs.version }}
++          INPUT_FORCE: ${{ inputs.force }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          set -eu
++          # Zugang zu GHCR nur fuer diesen Schritt in einer eigenen Docker Konfiguration (ohne docker login)
++          DOCKER_CONFIG=$(mktemp -d "${RUNNER_TEMP}/docker-ghcr.XXXXXX")
++          export DOCKER_CONFIG
++          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
++          AUTH=$(printf '%s:%s' "${GITHUB_ACTOR}" "$GH_TOKEN" | base64 -w0)
++          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
++          AKTUELL=$(curl -fsSL --retry 3 "$VERSIONS_URL" | jq -r '.coolify.v4.version')
++          VERSION=${INPUT_VERSION:-$AKTUELL}
++          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
++            echo "Ungueltige Version: $VERSION"; exit 1
++          fi
++          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
++          # latest nur fuer die aktuelle Version aus versions.json
++          if [ "$VERSION" = "$AKTUELL" ]; then echo "latest=true" >> "$GITHUB_OUTPUT"; else echo "latest=false" >> "$GITHUB_OUTPUT"; fi
++
++          OFFIZIELL=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' "${UPSTREAM}:${VERSION}" | tr -d '"')
++          [ -n "$OFFIZIELL" ] || { echo "Offizielles Abbild ${UPSTREAM}:${VERSION} nicht gefunden"; exit 1; }
++          echo "offiziell=$OFFIZIELL" >> "$GITHUB_OUTPUT"
++
++          # Zustand des Ziel Tags: fehlt, ersatz (= offizieller Digest), gepatcht oder veraltet
++          # (gepatcht aus einem anderen Stand von main).
++          # Andere Fehler (Netz, Rate Limit) brechen ab, statt einen Tag faelschlich als fehlend zu werten.
++          if AUSGABE=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' "${IMAGE}:${VERSION}" 2>&1); then
++            ZIEL=$(printf '%s' "$AUSGABE" | tr -d '"')
++            if [ "$ZIEL" = "$OFFIZIELL" ]; then ZUSTAND=ersatz; else ZUSTAND=gepatcht; fi
++          # denied: Paket existiert noch nicht (erster Lauf). Waere es ein echtes Rechteproblem,
++          # scheitert auch jeder Push, ein gepatchter Tag kann dann nicht ueberschrieben werden.
++          elif printf '%s' "$AUSGABE" | grep -qiE 'not found|manifest unknown|name unknown|denied|403 Forbidden'; then
++            ZUSTAND=fehlt
++          else
++            echo "Ziel Tag nicht pruefbar: $AUSGABE"; exit 1
++          fi
++
++          BAUEN=true
++          case "$ZUSTAND" in
++            fehlt) GRUND="Tag fehlt" ;;
++            ersatz) GRUND="Ersatz (offizielles Abbild) liegt aus, neuer Versuch" ;;
++            gepatcht)
++              # Gepatcht, aber aus einem aelteren Stand von main gebaut (z. B. ein Push Lauf ging
++              # in der Warteschlange verloren): neu bauen. Ein Fehlschlag laesst den Tag stehen.
++              REV=$(docker buildx imagetools inspect --format '{{json .Image}}' "${IMAGE}:${VERSION}" \
++                | jq -r '[.. | objects | .config? | objects | .Labels? | objects | .["org.opencontainers.image.revision"] // empty] | first // empty')
++              if [ "$REV" = "$GITHUB_SHA" ]; then
++                BAUEN=false; GRUND="${IMAGE}:${VERSION} liegt bereits gepatcht vor (Stand ${REV})"
++              else
++                ZUSTAND=veraltet; GRUND="${IMAGE}:${VERSION} gepatcht aus Stand ${REV:-unbekannt}, main ist ${GITHUB_SHA}, neuer Bau"
++              fi
++              ;;
++          esac
++          case "$ZUSTAND" in
++            ersatz|veraltet)
++              # Planmaessig hoechstens stuendlich: Zeit des letzten fehlgeschlagenen Laufs.
++              if [ "${GITHUB_EVENT_NAME}" = schedule ]; then
++                LETZTER=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?status=failure&per_page=1" \
++                  --jq '.workflow_runs[0].created_at // empty' 2>/dev/null || true)
++                case "$LETZTER" in
++                  [0-9][0-9][0-9][0-9]-*T*Z) ALTER=$(( $(date -u +%s) - $(date -u -d "$LETZTER" +%s) )) ;;
++                  *) ALTER=999999 ;;
++                esac
++                if [ "$ALTER" -lt 3300 ]; then
++                  BAUEN=false; GRUND="${GRUND}; letzter Fehlversuch ${LETZTER}, naechster Versuch nach einer Stunde"
++                fi
++              fi
++              ;;
++          esac
++          if [ "$BAUEN" = false ] && { [ "${GITHUB_EVENT_NAME}" = push ] || [ "${INPUT_FORCE:-false}" = true ]; }; then
++            BAUEN=true; GRUND="${GRUND}; Bau erzwungen (${GITHUB_EVENT_NAME})"
++          fi
++          echo "zustand=$ZUSTAND" >> "$GITHUB_OUTPUT"
++          echo "bauen=$BAUEN" >> "$GITHUB_OUTPUT"
++          echo "Coolify ${VERSION}: ${GRUND}" >> "$GITHUB_STEP_SUMMARY"
++
++      - name: latest nachziehen
++        # Fehlte latest (z. B. abgebrochener Push), wird es auf den vorhandenen Versions Tag gesetzt.
++        if: steps.plan.outputs.bauen == 'false' && steps.plan.outputs.latest == 'true'
++        env:
++          VERSION: ${{ steps.plan.outputs.version }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          set -eu
++          # Zugang zu GHCR nur fuer diesen Schritt in einer eigenen Docker Konfiguration (ohne docker login)
++          DOCKER_CONFIG=$(mktemp -d "${RUNNER_TEMP}/docker-ghcr.XXXXXX")
++          export DOCKER_CONFIG
++          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
++          AUTH=$(printf '%s:%s' "${GITHUB_ACTOR}" "$GH_TOKEN" | base64 -w0)
++          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
++          V=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' "${IMAGE}:${VERSION}" | tr -d '"')
++          L=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' "${IMAGE}:latest" 2>/dev/null | tr -d '"' || true)
++          if [ "$V" != "$L" ]; then
++            docker buildx imagetools create -t "${IMAGE}:latest" "${IMAGE}@${V}"
++            echo "latest auf ${VERSION} (${V}) gesetzt" >> "$GITHUB_STEP_SUMMARY"
++          fi
++
++      - name: Gepatcht bauen und pruefen
++        id: patched
++        if: steps.plan.outputs.bauen == 'true'
++        continue-on-error: true
++        env:
++          VERSION: ${{ steps.plan.outputs.version }}
++          OFFIZIELL: ${{ steps.plan.outputs.offiziell }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          set -eu
++          # Quelle holen (privates Repo: Token nur als Header fuer diesen Aufruf).
++          # Liegt im selben Schritt, damit auch ein Fehler hier zum Ersatz fuehrt.
++          git init -q .
++          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
++            fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}" "${GITHUB_SHA}"
++          git checkout -q FETCH_HEAD
++          BASE="${UPSTREAM}@${OFFIZIELL}"
++          docker pull -q --platform linux/amd64 "$BASE"
++          docker tag "$BASE" "local/offiziell:${VERSION}"
++          # cloudflared Version aus dem Basisabbild, damit nur die Module angehoben werden.
++          CF=$(docker run --rm --entrypoint cloudflared "$BASE" --version | sed -n 's/^cloudflared version \([^ ]*\).*/\1/p')
++          [ -n "$CF" ] || { echo "cloudflared Version im Basisabbild nicht lesbar"; exit 1; }
++          docker build --pull --platform linux/amd64 \
++            --build-arg "COOLIFY_VERSION=${VERSION}" \
++            --build-arg "BASE=${BASE}" \
++            --build-arg "CLOUDFLARED_REF=${CF}" \
++            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
++            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
++            --label "org.opencontainers.image.version=${VERSION}" \
++            --label "org.opencontainers.image.base.name=${UPSTREAM}:${VERSION}" \
++            --label "org.opencontainers.image.base.digest=${OFFIZIELL}" \
++            --label "org.opencontainers.image.description=Coolify ${VERSION} mit neu gebautem mc und cloudflared (ohne HIGH/CRITICAL Befunde)" \
++            -t "local/coolify:${VERSION}" .
++          SKIP_TRIVY=1 sh test.sh "local/offiziell:${VERSION}" "local/coolify:${VERSION}"
++
++      - name: Scannen (Bericht, blockiert nicht)
++        if: steps.patched.outcome == 'success'
++        env:
++          VERSION: ${{ steps.plan.outputs.version }}
++        run: |
++          for BILD in "local/offiziell:${VERSION}" "local/coolify:${VERSION}"; do
++            N=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --quiet --scanners vuln \
++              --severity HIGH,CRITICAL --ignore-unfixed --format json "$BILD" \
++              | jq '[.Results[]?.Vulnerabilities[]?] | length') || N="Scan fehlgeschlagen"
++            echo "Trivy HIGH/CRITICAL fixable ${BILD}: ${N}" >> "$GITHUB_STEP_SUMMARY"
++            # Sichtbar machen, wenn das veroeffentlichte Abbild nicht mehr 0 hat (Ziel TK-119), ohne zu blockieren.
++            if [ "$BILD" = "local/coolify:${VERSION}" ] && [ "$N" != 0 ]; then
++              echo "::warning title=Trivy Befunde::local/coolify:${VERSION}: ${N} HIGH/CRITICAL mit Fix, Pins in Dockerfile anheben"
++            fi
++          done
++          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --quiet --scanners vuln \
++            --severity HIGH,CRITICAL --ignore-unfixed --format table "local/coolify:${VERSION}" || true
++
++      - name: Gepatcht veroeffentlichen
++        if: steps.patched.outcome == 'success'
++        env:
++          VERSION: ${{ steps.plan.outputs.version }}
++          LATEST: ${{ steps.plan.outputs.latest }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          set -eu
++          # Zugang zu GHCR nur fuer diesen Schritt in einer eigenen Docker Konfiguration (ohne docker login)
++          DOCKER_CONFIG=$(mktemp -d "${RUNNER_TEMP}/docker-ghcr.XXXXXX")
++          export DOCKER_CONFIG
++          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
++          AUTH=$(printf '%s:%s' "${GITHUB_ACTOR}" "$GH_TOKEN" | base64 -w0)
++          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
++          TAGS="$VERSION"
++          if [ "$LATEST" = true ]; then TAGS="$TAGS latest"; fi
++          for TAG in $TAGS; do
++            docker tag "local/coolify:${VERSION}" "${IMAGE}:${TAG}"
++            docker push -q "${IMAGE}:${TAG}"
++          done
++          DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' "${IMAGE}:${VERSION}" | tr -d '"')
++          echo "Veroeffentlicht (gepatcht): ${IMAGE} Tags ${TAGS} als ${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
++
++      - name: Ersatz veroeffentlichen (offizielles Abbild unveraendert)
++        # Nur wenn der Tag fehlt oder schon der Ersatz ist: ein gepatchter Tag wird nie
++        # durch das offizielle Abbild ersetzt (z. B. nach einem kaputten Commit auf main).
++        if: always() && steps.plan.outputs.bauen == 'true' && steps.patched.outcome != 'success' && (steps.plan.outputs.zustand == 'fehlt' || steps.plan.outputs.zustand == 'ersatz')
++        env:
++          VERSION: ${{ steps.plan.outputs.version }}
++          LATEST: ${{ steps.plan.outputs.latest }}
++          OFFIZIELL: ${{ steps.plan.outputs.offiziell }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          set -eu
++          # Zugang zu GHCR nur fuer diesen Schritt in einer eigenen Docker Konfiguration (ohne docker login)
++          DOCKER_CONFIG=$(mktemp -d "${RUNNER_TEMP}/docker-ghcr.XXXXXX")
++          export DOCKER_CONFIG
++          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
++          AUTH=$(printf '%s:%s' "${GITHUB_ACTOR}" "$GH_TOKEN" | base64 -w0)
++          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
++          # Kopiert das Manifest (alle Plattformen) unveraendert, Digest bleibt gleich.
++          set -- -t "${IMAGE}:${VERSION}"
++          if [ "$LATEST" = true ]; then set -- "$@" -t "${IMAGE}:latest"; fi
++          docker buildx imagetools create "$@" "${UPSTREAM}@${OFFIZIELL}"
++          {
++            echo "## ACHTUNG: Ersatz veroeffentlicht"
++            echo "Gepatchter Bau oder test.sh fehlgeschlagen. ${IMAGE}:${VERSION} ist das unveraenderte offizielle Abbild ${UPSTREAM}@${OFFIZIELL} (mit den bekannten Befunden in mc und cloudflared)."
++          } >> "$GITHUB_STEP_SUMMARY"
++          echo "::error title=Ersatz veroeffentlicht::Gepatchter Bau fuer Coolify ${VERSION} fehlgeschlagen, offizielles Abbild als ${IMAGE}:${VERSION} veroeffentlicht"
++          exit 1
++
++      - name: Fehlschlag melden
++        if: steps.patched.outcome == 'failure'
++        run: |
++          echo "Gepatchter Bau oder test.sh fehlgeschlagen (Tag Zustand vorher: ${{ steps.plan.outputs.zustand }})." >> "$GITHUB_STEP_SUMMARY"
++          echo "::error title=Gepatchter Bau fehlgeschlagen::Details im Schritt 'Gepatcht bauen und pruefen'"
++          exit 1
