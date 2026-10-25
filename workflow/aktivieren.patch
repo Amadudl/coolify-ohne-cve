@@ -6,7 +6,7 @@ index 0000000..bda5d9f
 @@ -0,0 +1,256 @@
 +name: build
 +
-+# Baut ghcr.io/amadudl/coolify-ohne-cve:<version> fuer jede neue Coolify Version.
++# Baut ghcr.io/amadudl/coolify-ohne-cve-public:<version> fuer jede neue Coolify Version.
 +# Schlaegt der gepatchte Bau oder test.sh fehl, wird das unveraenderte offizielle
 +# Abbild coollabsio/coolify:<version> unter demselben Tag veroeffentlicht (Ersatz),
 +# damit upgrade.sh auf dem Server das Abbild immer ziehen kann. Der Lauf endet dann rot.
@@ -44,7 +44,7 @@ index 0000000..bda5d9f
 +      packages: write
 +      actions: read
 +    env:
-+      IMAGE: ghcr.io/amadudl/coolify-ohne-cve
++      IMAGE: ghcr.io/amadudl/coolify-ohne-cve-public
 +      UPSTREAM: docker.io/coollabsio/coolify
 +      TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
 +      VERSIONS_URL: https://cdn.coollabs.io/coolify/versions.json

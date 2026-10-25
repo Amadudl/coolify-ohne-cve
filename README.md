@@ -4,7 +4,7 @@ Abgeleitetes Abbild von `coollabsio/coolify` ohne die HIGH/CRITICAL Befunde, die
 in den mitgelieferten Go Programmen `/usr/bin/mc` und `/usr/local/bin/cloudflared` meldet.
 Ticket: TK-119.
 
-Abbild: `ghcr.io/amadudl/coolify-ohne-cve:<coolify version>` und `:latest`
+Abbild: `ghcr.io/amadudl/coolify-ohne-cve-public:<coolify version>` und `:latest`
 (nur linux/amd64; der Ersatzfall unten kopiert das offizielle Multi Arch Manifest).
 
 ## Was geaendert wird
@@ -65,7 +65,7 @@ per Digest festgelegt und ohne Zugangsdaten auf der Platte. Der Bau prueft mit `
 (`scripts/check-modules.sh`), dass die angehobenen Module wirklich im Binary stecken.
 
 Ersatzfall: Scheitert Bau oder Test, wird `coollabsio/coolify:<version>` unveraendert
-(gleicher Digest) als `ghcr.io/amadudl/coolify-ohne-cve:<version>` veroeffentlicht und der Lauf
+(gleicher Digest) als `ghcr.io/amadudl/coolify-ohne-cve-public:<version>` veroeffentlicht und der Lauf
 endet rot mit Hinweis in der Zusammenfassung. So bricht das naechtliche Coolify Update nie
 an einem fehlenden Tag ab. Ein Ersatz Tag wird planmaessig hoechstens stuendlich erneut gepatcht
 versucht (Abstand zum letzten fehlgeschlagenen Lauf, daher `actions: read`). Ein gepatchter Tag
@@ -89,3 +89,7 @@ Sentinel: [docs/sentinel.md](docs/sentinel.md).
   dieses Repo privat ist, erfuellt das Label `org.opencontainers.image.source` das nicht.
 - `/usr/local/bin/cloudflared`: Apache License 2.0, Tag wie im offiziellen Abbild, nur `go.mod`/`go.sum` geaendert.
 - Alles andere stammt unveraendert aus `coollabsio/coolify` (Apache License 2.0).
+
+## Paketname
+
+Das erste Paket `ghcr.io/amadudl/coolify-ohne-cve` entstand, als das Repo noch privat war, und ist deshalb privat; GitHub erlaubt die Umstellung der Sichtbarkeit nur in der Weboberfläche. newserver zieht ohne Docker Zugangsdaten, deshalb veröffentlicht die Pipeline seit 25.10.2026 unter `ghcr.io/amadudl/coolify-ohne-cve-public`, das aus dem öffentlichen Repo öffentlich entsteht (TK-119).
