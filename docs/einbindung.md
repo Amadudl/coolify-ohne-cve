@@ -11,11 +11,11 @@ Stand 25.10.2026, gelesen ohne Aenderung auf newserver:
 
 ## Voraussetzungen
 
-1. Workflow aktiviert (siehe README) und mindestens ein gruener Lauf, `ghcr.io/amadudl/coolify-ohne-cve:4.5.0` und `:latest` vorhanden.
-2. Das GHCR Paket `coolify-ohne-cve` ist **oeffentlich**. Pakete aus einem privaten Repo sind zuerst privat;
+1. Workflow aktiviert (siehe README) und mindestens ein gruener Lauf, `ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0` und `:latest` vorhanden.
+2. Das GHCR Paket `coolify-ohne-cve-public` ist **oeffentlich**. Pakete aus einem privaten Repo sind zuerst privat;
    ohne Umstellung (GitHub, Package settings, Change visibility, Public) scheitert der anonyme Pull und damit jedes
    Coolify Update. Pruefen ohne Zugangsdaten:
-   `DOCKER_CONFIG=$(mktemp -d) docker manifest inspect ghcr.io/amadudl/coolify-ohne-cve:4.5.0 >/dev/null && echo ok`
+   `DOCKER_CONFIG=$(mktemp -d) docker manifest inspect ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0 >/dev/null && echo ok`
 3. Das Abbild auf VM claude erneut mit `test.sh` gegen das offizielle pruefen (Pipeline hat das schon getan).
 
 ## Wie LATEST_IMAGE in custom.yml aufgeloest wird
@@ -33,7 +33,7 @@ Stand 25.10.2026, gelesen ohne Aenderung auf newserver:
 - Zeile 303 und 346: der Neustart im Helper laeuft mit `LATEST_IMAGE=<zielversion> docker compose ... up -d`.
 
 Lokal nachgestellt mit den Compose Dateien von newserver (Argument 4.5.1, `.env` mit 4.4.9):
-`config --images` liefert `ghcr.io/amadudl/coolify-ohne-cve:4.5.1`; ohne Umgebung kommt der Wert aus `.env`.
+`config --images` liefert `ghcr.io/amadudl/coolify-ohne-cve-public:4.5.1`; ohne Umgebung kommt der Wert aus `.env`.
 Ergebnis: der Override folgt immer der Version, auf die Coolify gerade aktualisiert.
 
 Zeitfenster: Coolify sieht eine neue Version erst bei der stuendlichen Pruefung, das Update laeuft um 00:59.
@@ -61,7 +61,7 @@ docker inspect coolify > "$B/coolify-inspect.json"
      postgres:
        image: ghcr.io/amadudl/postgres-ohne-gosu:15.19-alpine
      coolify:
-       image: "ghcr.io/amadudl/coolify-ohne-cve:${LATEST_IMAGE:-latest}"
+       image: "ghcr.io/amadudl/coolify-ohne-cve-public:${LATEST_IMAGE:-latest}"
    ```
 
 2. Pruefen, was gezogen wuerde (nur lesend):
@@ -72,7 +72,7 @@ docker inspect coolify > "$B/coolify-inspect.json"
      -f docker-compose.custom.yml config --images
    ```
 
-   Erwartet: `ghcr.io/amadudl/coolify-ohne-cve:4.5.0`, `ghcr.io/amadudl/postgres-ohne-gosu:15.19-alpine`, `redis:7-alpine`.
+   Erwartet: `ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0`, `ghcr.io/amadudl/postgres-ohne-gosu:15.19-alpine`, `redis:7-alpine`.
 
 3. Ueber den offiziellen Weg neu starten (gleiche Argumente wie das letzte Update):
 
@@ -81,7 +81,7 @@ docker inspect coolify > "$B/coolify-inspect.json"
    ```
 
 4. Nachher: `docker inspect -f '{{.Config.Image}} {{.State.Health.Status}}' coolify` zeigt
-   `ghcr.io/amadudl/coolify-ohne-cve:4.5.0 healthy`; Coolify UI erreichbar (HTTP 200), Server erreichbar,
+   `ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0 healthy`; Coolify UI erreichbar (HTTP 200), Server erreichbar,
    eine S3 Sicherung von Hand ausloesen; laufendes Abbild mit Trivy 0.76.1 scannen (erwartet 0 HIGH/CRITICAL mit Fix).
 
 ## Rueckweg
