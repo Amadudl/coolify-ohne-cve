@@ -12,7 +12,7 @@ Stand 25.10.2026, gelesen ohne Aenderung auf newserver:
 ## Voraussetzungen
 
 1. Workflow aktiviert (siehe README) und mindestens ein gruener Lauf, `ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0` und `:latest` vorhanden.
-2. Das GHCR Paket `coolify-ohne-cve` ist **oeffentlich**. Pakete aus einem privaten Repo sind zuerst privat;
+2. Das GHCR Paket `coolify-ohne-cve-public` ist **oeffentlich**. Pakete aus einem privaten Repo sind zuerst privat;
    ohne Umstellung (GitHub, Package settings, Change visibility, Public) scheitert der anonyme Pull und damit jedes
    Coolify Update. Pruefen ohne Zugangsdaten:
    `DOCKER_CONFIG=$(mktemp -d) docker manifest inspect ghcr.io/amadudl/coolify-ohne-cve-public:4.5.0 >/dev/null && echo ok`
