@@ -43,10 +43,10 @@ a=$(docker image inspect -f "$lab" "$ORIG" | grep -v '^org\.opencontainers\.imag
 b=$(docker image inspect -f "$lab" "$NEU" | grep -v '^org\.opencontainers\.image\.' || true)
 if [ "$a" = "$b" ]; then ok "Labels ausser org.opencontainers.image.* gleich"; else nok "Labels weichen ab"; fi
 
-# 2. Basisschichten unveraendert, genau zwei neue Schichten (mc, cloudflared).
+# 2. Basisschichten unveraendert, genau drei neue Schichten (curl/libcurl, mc, cloudflared).
 la=$(docker image inspect -f '{{len .RootFS.Layers}}' "$ORIG")
 lb=$(docker image inspect -f '{{len .RootFS.Layers}}' "$NEU")
-if [ "$lb" -eq $((la + 2)) ]; then ok "genau 2 neue Schichten ($la -> $lb)"; else nok "Schichten $la -> $lb, erwartet $((la + 2))"; fi
+if [ "$lb" -eq $((la + 3)) ]; then ok "genau 3 neue Schichten ($la -> $lb)"; else nok "Schichten $la -> $lb, erwartet $((la + 3))"; fi
 basis=$(docker image inspect -f '{{range .RootFS.Layers}}{{.}} {{end}}' "$ORIG")
 case "$(docker image inspect -f '{{range .RootFS.Layers}}{{.}} {{end}}' "$NEU")" in
   "$basis"*) ok "Basisschichten unveraendert" ;;

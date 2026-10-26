@@ -62,5 +62,10 @@ RUN set -eu; \
  && sh /usr/local/bin/check-modules /out/cloudflared ${CLOUDFLARED_MODULES}
 
 FROM ${BASE}
+# CVE-2026-92392: retain the upstream runtime user after the package repair.
+USER root
+RUN apk upgrade --no-cache curl libcurl \
+ && apk add --no-cache 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
+USER www-data
 COPY --from=mc --chown=0:0 --chmod=755 /out/mc /usr/bin/mc
 COPY --from=cloudflared --chown=0:0 --chmod=755 /out/cloudflared /usr/local/bin/cloudflared
