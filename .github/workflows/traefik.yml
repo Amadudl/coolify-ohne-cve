@@ -19,7 +19,7 @@ jobs:
       contents: read
       packages: write
     env:
-      IMAGE: ghcr.io/amadudl/traefik-ohne-cve-public
+      IMAGE: ghcr.io/amadudl/coolify-ohne-cve-public
       TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
     steps:
       - name: Source
@@ -54,7 +54,7 @@ jobs:
           trap 'rm -rf "$DOCKER_CONFIG"' EXIT
           AUTH=$(printf '%s:%s' "$GITHUB_ACTOR" "$GH_TOKEN" | base64 -w0)
           printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
-          for TAG in "3.7.16-${GITHUB_SHA}" 3.7.16; do
+          for TAG in "traefik-3.7.16-${GITHUB_SHA}" traefik-3.7.16; do
             docker tag local/traefik:patched "${IMAGE}:${TAG}"
             docker push "${IMAGE}:${TAG}"
           done

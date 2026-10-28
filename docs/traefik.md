@@ -10,7 +10,9 @@ Die offizielle Laufzeit bleibt unveraendert, nur `/usr/local/bin/traefik` wird e
 Die Pipeline baut auf GitHub, prueft Laufzeitkonfiguration, Version, Ping,
 Dashboard und API und blockiert bei jedem behebbaren HIGH/CRITICAL Befund.
 PR Laeufe veroeffentlichen nichts. Main veroeffentlicht das gepruefte Abbild als
-`ghcr.io/amadudl/traefik-ohne-cve-public:3.7.16-<commit>` und `:3.7.16`.
+`ghcr.io/amadudl/coolify-ohne-cve-public:traefik-3.7.16-<commit>` und
+`:traefik-3.7.16`. Das vorhandene oeffentliche Plattformpaket wird wiederverwendet;
+die getrennten Traefik Tags aendern weder Coolify Versionstags noch `latest`.
 
 Vor Produktion: anonymen Pull pruefen, bestehende Proxy Compose Datei sichern,
 alte Image ID fuer Rollback festhalten. Nur die Image Referenz im bestehenden
