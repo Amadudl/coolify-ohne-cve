@@ -48,7 +48,8 @@ RUN set -eu; \
 
 FROM gobase AS cloudflared
 ARG CLOUDFLARED_REF
-ARG CLOUDFLARED_MODULES="github.com/klauspost/compress@v1.18.7"
+# CVE-2026-116587: cap RSA JWK modulus size through go-jose v4.1.6.
+ARG CLOUDFLARED_MODULES="github.com/klauspost/compress@v1.18.7 github.com/go-jose/go-jose/v4@v4.1.6"
 WORKDIR /src/cloudflared
 RUN git clone -q --depth 1 --branch "${CLOUDFLARED_REF}" https://github.com/cloudflare/cloudflared.git . \
  && sh /usr/local/bin/raise-modules ${CLOUDFLARED_MODULES}

@@ -14,7 +14,7 @@ Nur zwei Dateien, jeweils als eigene Schicht ueber dem unveraenderten offizielle
 | Pfad | Offiziell (4.5.0) | Hier |
 |---|---|---|
 | `/usr/bin/mc` | AIStor mc RELEASE.2026-09-06, go1.26.6, x/net 0.58.0, grpc 1.82.1 | quelloffener mc aus `github.com/minio/mc` (master 77f82e1, letzter Stand, Repo archiviert), go1.27.3, x/net 0.60.0, grpc 1.83.2, compress 1.18.7, prometheus 0.311.3 |
-| `/usr/local/bin/cloudflared` | Release 2026.10.3, compress 1.18.0 | Tag 2026.10.3 aus der Quelle, compress 1.18.7, gleiche Versionsangabe |
+| `/usr/local/bin/cloudflared` | Release 2026.10.3, compress 1.18.0 | Tag 2026.10.3 aus der Quelle, compress 1.18.7, go-jose/v4 mindestens 4.1.6, gleiche Versionsangabe |
 
 Eigentuemer und Rechte bleiben `root:root 755`. Entrypoint, Cmd, Nutzer (`www-data`),
 Umgebung, Healthcheck und alle Basisschichten sind identisch, nur die Labels
@@ -25,6 +25,14 @@ Warum der quelloffene mc: AIStor mc ist nicht quelloffen und auch das neueste
 `dl.min.io` liefert fuer den alten mc nur noch 410. Im Coolify Container selbst wird
 mc fuer Sicherungen nicht aufgerufen (Coolify fuehrt `mc` im Helper Container aus),
 cloudflared dient dort als SSH ProxyCommand (`cloudflared access ssh --hostname %h`).
+
+## Sicherheitskorrektur vom 28.10.2026
+
+TK-119: `github.com/go-jose/go-jose/v4` wird fuer cloudflared auf mindestens
+`v4.1.6` angehoben (CVE-2026-116587). Der vorhandene Modul Updater und die
+Binary Pruefung setzen diese Untergrenze durch. Die Anwendungsversion und
+Laufzeitkonfiguration bleiben unveraendert. Ein erfolgreicher Bau ersetzt
+nicht den Nachscan des tatsaechlich laufenden Image IDs und die Healthprobe.
 
 ## Bauen und pruefen
 
