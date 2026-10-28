@@ -19,3 +19,13 @@ anderen Einstellungen aendern. Danach Proxy neu erstellen, bestehende HTTPS
 Anwendungen und Health pruefen und exakt die laufende Image ID nachscannen.
 Bei fehlender Scanabdeckung oder Fehlern bleibt TK-119 offen. Rueckweg ist die
 alte Image Referenz mit der gesicherten unveraenderten Proxy Konfiguration.
+
+## Provenienz der Go Modulversion
+
+Der Build holt den echten Upstream Tag `v3.7.16` und prueft dessen Commit gegen
+`af6d927c51191ae1df104aaf907793386b816c28`. Go erkennt damit die Releaseversion
+selbst, statt aus einem Checkout ohne Tags eine falsche `v3.0.0` Pseudoversion
+abzuleiten. Die Abhaengigkeitsaenderung bleibt ehrlich als `v3.7.16+dirty` und
+`vcs.modified=true` sichtbar. Der Build prueft Releaseversion, Revision und
+Dirty Marker im fertigen Binary. Keine Scanner Ausnahme und kein
+Ueberschreiben der Go Build Metadaten werden verwendet.

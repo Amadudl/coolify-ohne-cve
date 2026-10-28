@@ -4,8 +4,9 @@ FROM node:24-alpine3.24 AS webui
 RUN apk add --no-cache git
 WORKDIR /src
 RUN git init -q . \
- && git fetch -q --depth 1 https://github.com/traefik/traefik.git af6d927c51191ae1df104aaf907793386b816c28 \
- && git checkout -q FETCH_HEAD
+ && git fetch -q --depth 1 https://github.com/traefik/traefik.git refs/tags/v3.7.16:refs/tags/v3.7.16 \
+ && git checkout -q refs/tags/v3.7.16 \
+ && test "$(git rev-parse HEAD)" = af6d927c51191ae1df104aaf907793386b816c28
 WORKDIR /src/webui
 ENV VITE_APP_BASE_URL="" VITE_APP_BASE_API_URL="/api"
 RUN corepack enable && yarn install --immutable && yarn build:prod
@@ -20,6 +21,11 @@ RUN sh /usr/local/bin/raise-modules.sh github.com/go-jose/go-jose/v4@v4.1.6 \
  && go test github.com/go-jose/go-jose/v4/... \
  && go build -ldflags '-s -w -X github.com/traefik/traefik/v3/pkg/version.Version=3.7.16 -X github.com/traefik/traefik/v3/pkg/version.Codename=langres' -o /out/traefik ./cmd/traefik \
  && sh /usr/local/bin/check-modules.sh /out/traefik github.com/go-jose/go-jose/v4@v4.1.6 \
+ && go version -m /out/traefik > /out/build-info.txt \
+ && awk '$1 == "mod" && $2 == "github.com/traefik/traefik/v3" && $3 == "v3.7.16+dirty" { found=1 } END { exit !found }' /out/build-info.txt \
+ && grep -Fq "vcs.revision=af6d927c51191ae1df104aaf907793386b816c28" /out/build-info.txt \
+ && grep -Fq "vcs.modified=true" /out/build-info.txt \
+ && cat /out/build-info.txt \
  && /out/traefik version
 
 FROM ${BASE}
