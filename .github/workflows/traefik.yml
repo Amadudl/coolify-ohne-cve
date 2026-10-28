@@ -1,0 +1,60 @@
+name: traefik-security
+on:
+  push:
+    branches: [main]
+    paths: ['traefik/**', '.github/workflows/traefik.yml', 'scripts/**']
+  pull_request:
+    paths: ['traefik/**', '.github/workflows/traefik.yml', 'scripts/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: traefik-security-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/amadudl/traefik-ohne-cve-public
+      TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+    steps:
+      - name: Source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          git init -q .
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" fetch -q --depth 1 "https://github.com/${GITHUB_REPOSITORY}" "$GITHUB_SHA"
+          git checkout -q FETCH_HEAD
+      - name: Build and verify
+        run: |
+          set -eu
+          BASE_DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest.Digest}}' traefik:v3.7.16 | tr -d '"')
+          test -n "$BASE_DIGEST"
+          BASE="traefik@${BASE_DIGEST}"
+          docker pull "$BASE"
+          docker build --platform linux/amd64 --build-arg "BASE=$BASE" -f traefik/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t local/traefik:patched .
+          sh traefik/test.sh "$BASE" local/traefik:patched
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY" image --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 local/traefik:patched
+      - name: Publish tested immutable revision
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          DOCKER_CONFIG=$(mktemp -d "${RUNNER_TEMP}/docker-ghcr.XXXXXX")
+          export DOCKER_CONFIG
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          AUTH=$(printf '%s:%s' "$GITHUB_ACTOR" "$GH_TOKEN" | base64 -w0)
+          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
+          for TAG in "3.7.16-${GITHUB_SHA}" 3.7.16; do
+            docker tag local/traefik:patched "${IMAGE}:${TAG}"
+            docker push "${IMAGE}:${TAG}"
+          done
